@@ -9,17 +9,32 @@ const client = axios.create({
   },
 });
 
+function simulationPayload({ numAgents, steps, taxRate }) {
+  return {
+    num_agents: numAgents,
+    steps,
+    tax_rate: taxRate,
+  };
+}
+
 /**
  * Run a SYNAPSES simulation through the FastAPI backend.
  * @param {{numAgents: number, steps: number, taxRate: number}} config
  * @returns {Promise<object>} full JSON response from /run_simulation
  */
-export async function runSimulation({ numAgents, steps, taxRate }) {
-  const response = await client.post('/run_simulation', {
-    num_agents: numAgents,
-    steps,
-    tax_rate: taxRate,
-  });
+export async function runSimulation(config) {
+  const response = await client.post('/run_simulation', simulationPayload(config));
+
+  return response.data;
+}
+
+/**
+ * Run all SYNAPSES experiment variants through the FastAPI backend.
+ * @param {{numAgents: number, steps: number, taxRate: number}} config
+ * @returns {Promise<object>} full JSON response from /run_experiment
+ */
+export async function runExperiment(config) {
+  const response = await client.post('/run_experiment', simulationPayload(config));
 
   return response.data;
 }
