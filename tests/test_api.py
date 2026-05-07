@@ -1,0 +1,94 @@
+"""Tests for the SYNAPSES FastAPI app."""
+
+import importlib.util
+import unittest
+
+FASTAPI_AVAILABLE = importlib.util.find_spec("fastapi") is not None
+
+if FASTAPI_AVAILABLE:
+    from fastapi.testclient import TestClient
+
+    from synapses.api import app
+else:
+    TestClient = None
+    app = None
+
+
+@unittest.skipUnless(FASTAPI_AVAILABLE, "FastAPI dependency is not installed")
+class RunSimulationEndpointTests(unittest.TestCase):
+    """Verify SYNAPSES API endpoints integrate the simulation stack."""
+
+    def setUp(self) -> None:
+        self.client = TestClient(app)
+
+    def test_run_simulation_returns_metrics_over_time(self) -> None:
+        response = self.client.post(
+            "/run_simulation",
+            json={"num_agents": 3, "steps": 2, "tax_rate": 0.25},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        metrics = body["metrics_over_time"]
+        self.assertEqual(len(metrics), 2)
+        self.assertEqual([entry["step"] for entry in metrics], [1, 2])
+        self.assertIn("gini", metrics[-1])
+        self.assertIn("average_satisfaction", metrics[-1])
+        self.assertIn("crime_history", metrics[-1])
+        self.assertIn("interventions", metrics[-1])
+
+    def test_tax_rate_defaults_to_zero(self) -> None:
+        response = self.client.post(
+            "/run_simulation",
+            json={"num_agents": 1, "steps": 1},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        metrics = response.json()["metrics_over_time"]
+        self.assertEqual(metrics[0]["gini"], 0.0)
+
+    def test_run_experiment_returns_comparison_results(self) -> None:
+        response = self.client.post(
+            "/run_experiment",
+            json={"num_agents": 3, "steps": 2, "tax_rate": 0.25},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual(
+            set(body["experiments"]),
+            {"no_director", "random", "director_based"},
+        )
+        self.assertEqual(
+            set(body["comparison"]),
+            {"no_director", "random", "director_based"},
+        )
+        self.assertEqual(
+            len(body["experiments"]["director_based"]["metrics_over_time"]),
+            2,
+        )
+
+    def test_cors_allows_frontend_origins_for_dev(self) -> None:
+        response = self.client.options(
+            "/run_simulation",
+            headers={
+                "Origin": "http://localhost:5173",
+                "Access-Control-Request-Method": "POST",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.headers["access-control-allow-origin"], "*")
+        self.assertIn("POST", response.headers["access-control-allow-methods"])
+
+    def test_invalid_request_is_rejected(self) -> None:
+        response = self.client.post(
+            "/run_simulation",
+            json={"num_agents": 0, "steps": -1, "tax_rate": 1.5},
+        )
+
+        self.assertEqual(response.status_code, 422)
+
+
+if __name__ == "__main__":
+    unittest.main()
