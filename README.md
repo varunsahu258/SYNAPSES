@@ -151,3 +151,16 @@ curl -X POST http://127.0.0.1:8000/run_experiment \
 The experiment endpoint runs `no_director`, `random`, and `director_based`
 variants from the same starting conditions and returns comparison results.
 
+
+## React Control Panel
+
+The `control-panel/` app is a Create React App-style frontend for the FastAPI backend.
+It uses Axios for API calls and Recharts for simulation metric charts.
+
+```bash
+cd control-panel
+npm install
+npm start
+```
+
+The npm package registry was unavailable in this environment, so dependencies are declared in `control-panel/package.json` and should be installed locally when registry access is available.
