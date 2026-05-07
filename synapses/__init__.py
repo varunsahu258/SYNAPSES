@@ -25,6 +25,7 @@ __all__ = [
     "run_experiment",
     "run_full_simulation",
     "RandomDirector",
+    "run_full_simulation",
     "track_crime",
     "Workflow",
     "WorkflowStep",
