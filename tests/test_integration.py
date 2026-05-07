@@ -1,0 +1,82 @@
+"""Unit tests for the integrated SYNAPSES simulation runner."""
+
+import unittest
+
+from synapses import Agent, DirectorAI, Environment, IntegratedSimulation, run_full_simulation
+
+
+class IntegratedSimulationTests(unittest.TestCase):
+    """Verify all core modules work together in a full simulation."""
+
+    def test_full_simulation_returns_metrics_over_time(self) -> None:
+        simulation = IntegratedSimulation(
+            agents=[
+                Agent(wealth=0, health=80, satisfaction=30),
+                Agent(wealth=100, health=80, satisfaction=70),
+            ],
+            environment=Environment(food_supply=49, price=10, crime_rate=10),
+            director=DirectorAI(),
+        )
+
+        metrics_over_time = simulation.run(10)
+
+        self.assertEqual(len(metrics_over_time), 10)
+        self.assertEqual(metrics_over_time[0]["step"], 1)
+        self.assertEqual(metrics_over_time[-1]["step"], 10)
+        self.assertEqual(
+            metrics_over_time[-1]["crime_history"],
+            [50, 51, 52, 53, 54, 55, 56, 57, 58, 59],
+        )
+        self.assertEqual(metrics_over_time[-1]["average_satisfaction"], 50.0)
+        self.assertAlmostEqual(metrics_over_time[-1]["gini"], 0.5)
+        self.assertIn(
+            {"action": "redistribute_resources", "reason": "high_inequality"},
+            metrics_over_time[-1]["interventions"],
+        )
+        self.assertIn(
+            {"action": "increase_safety_programs", "reason": "high_crime"},
+            metrics_over_time[-1]["interventions"],
+        )
+
+    def test_history_records_agent_actions_and_environment_state(self) -> None:
+        simulation = IntegratedSimulation(
+            agents=[Agent(wealth=10, health=80, satisfaction=80)],
+            environment=Environment(food_supply=100, price=10, crime_rate=10),
+        )
+
+        simulation.run(1)
+
+        self.assertEqual(
+            simulation.history,
+            (
+                {
+                    "step": 1,
+                    "actions": [{"action": "work", "reason": "increase_wealth"}],
+                    "environment": {"food_supply": 105, "price": 10, "crime_rate": 0},
+                },
+            ),
+        )
+
+    def test_convenience_function_runs_full_simulation(self) -> None:
+        metrics_over_time = run_full_simulation(
+            steps=2,
+            agents=[Agent(wealth=50, health=80, satisfaction=80)],
+            environment=Environment(food_supply=100, price=10, crime_rate=10),
+        )
+
+        self.assertEqual(len(metrics_over_time), 2)
+        self.assertEqual(metrics_over_time[-1]["crime_history"], [0, 0])
+        self.assertEqual(
+            metrics_over_time[-1]["interventions"],
+            [{"action": "monitor", "reason": "stable_metrics"}],
+        )
+
+    def test_negative_steps_are_rejected(self) -> None:
+        simulation = IntegratedSimulation()
+
+        with self.assertRaisesRegex(ValueError, "zero or greater"):
+            simulation.run(-1)
+
+
+if __name__ == "__main__":
+    unittest.main()
