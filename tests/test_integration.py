@@ -38,6 +38,21 @@ class IntegratedSimulationTests(unittest.TestCase):
             metrics_over_time[-1]["interventions"],
         )
 
+    def test_iter_steps_yields_metrics_as_each_step_completes(self) -> None:
+        simulation = IntegratedSimulation(
+            agents=[Agent(wealth=50, health=80, satisfaction=80)],
+            environment=Environment(food_supply=100, price=10, crime_rate=10),
+            director=DirectorAI(),
+        )
+
+        step_iterator = simulation.iter_steps(2)
+        first = next(step_iterator)
+        second = next(step_iterator)
+
+        self.assertEqual(first["step"], 1)
+        self.assertEqual(second["step"], 2)
+        self.assertEqual(len(simulation.history), 2)
+
     def test_history_records_agent_actions_and_environment_state(self) -> None:
         simulation = IntegratedSimulation(
             agents=[Agent(wealth=10, health=80, satisfaction=80)],

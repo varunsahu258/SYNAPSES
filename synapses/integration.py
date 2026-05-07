@@ -8,7 +8,7 @@ how each deterministic simulation step evolves.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Iterable, Mapping
+from typing import Any, Iterable, Iterator
 
 from .agent import Agent
 from .causal import crime_from_price_and_inequality
@@ -61,14 +61,22 @@ class IntegratedSimulation:
         Returns:
             A list of per-step metric entries, including director interventions.
         """
+        return list(self.iter_steps(steps))
+
+    def iter_steps(self, steps: int) -> Iterator[MetricsEntry]:
+        """Yield one metrics entry after each deterministic simulation step.
+
+        Args:
+            steps: Number of deterministic steps to execute. Must be non-negative.
+
+        Yields:
+            Per-step metric entries as soon as each step is complete.
+        """
         if steps < 0:
             raise ValueError("Simulation steps must be zero or greater.")
 
-        metrics_over_time: list[MetricsEntry] = []
         for step_number in range(1, steps + 1):
-            metrics_over_time.append(self._run_step(step_number))
-
-        return metrics_over_time
+            yield self._run_step(step_number)
 
     def _run_step(self, step_number: int) -> MetricsEntry:
         """Run one integrated step and return the metrics entry."""

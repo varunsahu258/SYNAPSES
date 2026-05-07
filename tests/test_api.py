@@ -3,9 +3,12 @@
 import importlib.util
 import unittest
 
-FASTAPI_AVAILABLE = importlib.util.find_spec("fastapi") is not None
+TESTCLIENT_AVAILABLE = (
+    importlib.util.find_spec("fastapi") is not None
+    and importlib.util.find_spec("httpx") is not None
+)
 
-if FASTAPI_AVAILABLE:
+if TESTCLIENT_AVAILABLE:
     from fastapi.testclient import TestClient
 
     from synapses.api import app
@@ -14,7 +17,10 @@ else:
     app = None
 
 
-@unittest.skipUnless(FASTAPI_AVAILABLE, "FastAPI dependency is not installed")
+@unittest.skipUnless(
+    TESTCLIENT_AVAILABLE,
+    "FastAPI TestClient dependencies are not installed",
+)
 class RunSimulationEndpointTests(unittest.TestCase):
     """Verify SYNAPSES API endpoints integrate the simulation stack."""
 
@@ -67,6 +73,33 @@ class RunSimulationEndpointTests(unittest.TestCase):
             len(body["experiments"]["director_based"]["metrics_over_time"]),
             2,
         )
+
+    def test_websocket_streams_simulation_steps(self) -> None:
+        with self.client.websocket_connect("/ws/run_simulation") as websocket:
+            websocket.send_json({"num_agents": 3, "steps": 2, "tax_rate": 0.25})
+
+            first = websocket.receive_json()
+            second = websocket.receive_json()
+            complete = websocket.receive_json()
+
+        self.assertEqual(first["type"], "step")
+        self.assertEqual(first["metrics"]["step"], 1)
+        self.assertIn("gini", first["metrics"])
+        self.assertEqual(second["type"], "step")
+        self.assertEqual(second["metrics"]["step"], 2)
+        self.assertEqual(complete["type"], "complete")
+        self.assertEqual(
+            [entry["step"] for entry in complete["metrics_over_time"]],
+            [1, 2],
+        )
+
+    def test_websocket_rejects_invalid_request(self) -> None:
+        with self.client.websocket_connect("/ws/run_simulation") as websocket:
+            websocket.send_json({"num_agents": 0, "steps": -1, "tax_rate": 1.5})
+            error = websocket.receive_json()
+
+        self.assertEqual(error["type"], "error")
+        self.assertIn("detail", error)
 
     def test_cors_allows_frontend_origins_for_dev(self) -> None:
         response = self.client.options(
