@@ -122,3 +122,32 @@ metrics_over_time = run_full_simulation(
 The integrated runner coordinates agents, environment updates, causal crime,
 metrics, and Director AI interventions, then returns metrics over time.
 
+## FastAPI App
+
+Run the API locally:
+
+```bash
+uvicorn synapses.api:app --reload
+```
+
+Example request:
+
+```bash
+curl -X POST http://127.0.0.1:8000/run_simulation \
+  -H "Content-Type: application/json" \
+  -d '{"num_agents": 3, "steps": 10, "tax_rate": 0.25}'
+```
+
+The endpoint returns `metrics_over_time` from the integrated simulation stack.
+
+Run comparison experiments:
+
+```bash
+curl -X POST http://127.0.0.1:8000/run_experiment \
+  -H "Content-Type: application/json" \
+  -d '{"num_agents": 3, "steps": 10, "tax_rate": 0.25}'
+```
+
+The experiment endpoint runs `no_director`, `random`, and `director_based`
+variants from the same starting conditions and returns comparison results.
+
