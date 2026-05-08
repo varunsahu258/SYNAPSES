@@ -17,6 +17,24 @@ Action = dict[str, str]
 HistoryEntry = dict[str, Any]
 
 
+@dataclass(frozen=True)
+class AgentSignalConfig:
+    """Configuration for derived agent-facing environment signals.
+
+    Attributes:
+        risk_scale: Multiplier applied to environment ``crime_rate`` when
+            deriving the ``risk`` signal.
+        opportunity_price_weight: Price penalty per unit when computing
+            ``opportunity`` from ``food_supply`` and ``price``.
+        social_baseline: Reference value used to derive the ``social`` signal
+            from ``crime_rate``.
+    """
+
+    risk_scale: float = 1.0
+    opportunity_price_weight: float = 1.0
+    social_baseline: int = 100
+
+
 @dataclass
 class SimulationEngine:
     """Run deterministic simulations across agents and one environment.
@@ -28,15 +46,18 @@ class SimulationEngine:
 
     agents: list[Agent] = field(default_factory=list)
     environment: Environment = field(default_factory=Environment)
+    signal_config: AgentSignalConfig = field(default_factory=AgentSignalConfig)
 
     def __init__(
         self,
         agents: Iterable[Agent] | None = None,
         environment: Environment | None = None,
+        signal_config: AgentSignalConfig | None = None,
     ) -> None:
-        """Create an engine with optional agents and environment."""
+        """Create an engine with optional agents, environment, and signal config."""
         self.agents = list(agents or [])
         self.environment = environment or Environment()
+        self.signal_config = signal_config or AgentSignalConfig()
 
     def add_agent(self, agent: Agent) -> None:
         """Register one agent for future simulation steps."""
@@ -81,7 +102,16 @@ class SimulationEngine:
         state = self.environment.state()
         return {
             **state,
-            "risk": state["crime_rate"],
-            "opportunity": max(0, state["food_supply"] - state["price"]),
-            "social": max(0, 100 - state["crime_rate"]),
+            "risk": max(0, int(state["crime_rate"] * self.signal_config.risk_scale)),
+            "opportunity": max(
+                0,
+                int(
+                    state["food_supply"]
+                    - (state["price"] * self.signal_config.opportunity_price_weight)
+                ),
+            ),
+            "social": max(
+                0,
+                int(self.signal_config.social_baseline - state["crime_rate"]),
+            ),
         }

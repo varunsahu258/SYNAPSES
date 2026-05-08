@@ -1,54 +1,157 @@
 # SYNAPSES
 
-SYNAPSES contains small, dependency-free workflow utilities in Python and
-JavaScript. The current baseline models the required engineering cadence:
+SYNAPSES is a research-grade socio-economic simulation platform built around modular, deterministic components for simulation, AI governance, experimentation, explainability, and reproducibility.
 
-1. Plan
-2. Code
-3. Test
+## Project Features
 
-## Python
+- **Simulation Core**
+  - Deterministic agents, environment dynamics, simulation engine, and causal utilities.
+  - Configurable signal derivation and metrics tracking.
+- **Spatial Simulation**
+  - 2D `GridWorld` with localized resources/crime, occupancy tracking, neighborhood queries, and efficient agent registration/movement primitives.
+- **AI Systems**
+  - Rule-based `DirectorAI`.
+  - Reinforcement-learning Director stack (Gym-compatible wrapper + PPO pipeline hooks).
+- **Experiment Framework**
+  - Scenario experiments, counterfactual branching, Monte Carlo/batch orchestration, parameter sweeps, CI summaries, and export tooling.
+- **Explainability**
+  - Trend-aware, evidence-backed narrative explanations for key socio-economic shifts and interventions.
+- **Persistence & Reproducibility**
+  - SQLAlchemy persistence models/services for runs, metrics, interventions, snapshots, config versions, and checkpoints.
+  - Alembic migration scaffolding for database evolution.
+- **API & Realtime Dashboard Integration**
+  - FastAPI REST endpoints for simulation/experiments.
+  - WebSocket streaming protocol for dashboard metrics/events/spatial snapshots.
+- **Deployment & Operations**
+  - Dockerized services, Compose stack, Kubernetes manifests (base + overlays), GitHub Actions CI/CD, Prometheus/Grafana observability, and load-testing utility.
+
+---
+
+## Architecture (High Level)
+
+```text
+synapses/core           -> simulation/causal/entities/metrics/spatial primitives
+synapses/ai             -> director systems (rule-based + RL tools)
+synapses/application    -> orchestration services (simulation, experiments, explainability)
+synapses/interfaces     -> FastAPI/WebSocket interface adapters
+synapses/experiments    -> orchestration, counterfactuals, reporting
+synapses/persistence    -> DB config, ORM models, persistence/reproducibility services
+```
+
+This separation keeps simulation logic independent from UI/rendering and transport layers.
+
+---
+
+## Steps to Operate and Use the Project
+
+## 1) Local Setup
+
+### Prerequisites
+- Python 3.11+
+- Node.js 18+
+- npm 9+
+
+### Install dependencies
+```bash
+python -m venv .venv
+source .venv/bin/activate
+pip install -e .
+pip install -r requirements.txt  # if present in your environment
+```
+
+Frontend dependencies:
+```bash
+cd control-panel
+npm install
+cd ..
+```
+
+## 2) Run Tests (Validation First)
+
+Backend tests:
+```bash
+pytest -q
+```
+
+Optional quick checks:
+```bash
+python -m py_compile scripts/load_test.py
+```
+
+## 3) Run the FastAPI Backend
 
 ```bash
-python -m unittest discover -s tests
+uvicorn synapses.api:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-## JavaScript
+Useful endpoints:
+- `POST /run_simulation`
+- `POST /run_experiment`
+- `WS  /ws/dashboard`
+
+Example simulation call:
+```bash
+curl -X POST http://127.0.0.1:8000/run_simulation \
+  -H "Content-Type: application/json" \
+  -d '{"num_agents": 5, "steps": 20, "tax_rate": 0.25}'
+```
+
+## 4) Run the React Dashboard
 
 ```bash
-npm test
+cd control-panel
+npm start
 ```
 
-Each implementation is intentionally modular, independently testable, and kept
-free of external runtime dependencies.
+Open the local URL printed by React (typically `http://localhost:3000`) and connect to backend `http://127.0.0.1:8000`.
 
-## Agent
+## 5) Run with Docker Compose
 
-```python
-from synapses import Agent
-
-agent = Agent(wealth=30, health=80, satisfaction=70)
-action = agent.act({"risk": 10, "opportunity": 80})
-# {"action": "work", "reason": "increase_wealth"}
+```bash
+docker compose -f deploy/docker/docker-compose.yml up --build
 ```
 
-The agent is deterministic and returns an action dictionary from the supplied
-environment state.
+Services include API, worker, dashboard, Postgres, Prometheus, and Grafana.
 
-## Environment
+## 6) Kubernetes (Base/Overlay)
 
-```python
-from synapses import Environment
-
-environment = Environment(food_supply=100, price=10, crime_rate=10)
-state = environment.update([{"action": "work"}])
-# {"food_supply": 105, "price": 10, "crime_rate": 9}
+```bash
+kubectl apply -k deploy/k8s/overlays/dev
+# or
+kubectl apply -k deploy/k8s/overlays/prod
 ```
 
-The environment applies deterministic updates to `food_supply`, `price`, and
-`crime_rate` from action dictionaries.
+Use `deploy/k8s/base/secret.example.yaml` as a template for real secrets.
 
-## Simulation Engine
+## 7) Database Migrations (Persistence)
+
+From your configured environment:
+```bash
+alembic -c synapses/persistence/alembic.ini upgrade head
+```
+
+(Adjust path/config as needed for your deployment layout.)
+
+## 8) Load Testing
+
+```bash
+python scripts/load_test.py --help
+python scripts/load_test.py --url http://127.0.0.1:8000/run_simulation --concurrency 20 --requests 200
+```
+
+## 9) Research/Experiment Workflows
+
+Typical pipeline:
+1. Run baseline and variants through experiment orchestration.
+2. Export JSON/CSV summaries.
+3. Generate markdown publication reports.
+4. Optionally branch counterfactual timelines and compare outcome deltas.
+
+---
+
+## Minimal Usage Examples
+
+### Agent + Environment + Simulation
 
 ```python
 from synapses import Agent, Environment, SimulationEngine
@@ -60,50 +163,7 @@ engine = SimulationEngine(
 history = engine.run(10)
 ```
 
-The simulation engine manages agents, calls each agent for an action on every
-step, updates the environment, and returns state history.
-
-## Causal Model
-
-```python
-from synapses import crime_from_price_and_inequality, price_from_food_supply
-
-price = price_from_food_supply(food_supply=49)
-crime = crime_from_price_and_inequality(price=price, inequality=30)
-```
-
-The causal model functions are deterministic and independently testable:
-`price = f(food_supply)` and `crime = f(price, inequality)`.
-
-## Metrics
-
-```python
-from synapses import average_satisfaction, gini_coefficient, track_crime
-
-wealth_gini = gini_coefficient([10, 20, 70])
-mean_satisfaction = average_satisfaction(agents)
-crime_series = track_crime(history)
-```
-
-Metrics are stateless helpers for inequality, satisfaction, and crime tracking.
-
-## Director AI
-
-```python
-from synapses import DirectorAI
-
-director = DirectorAI()
-interventions = director.recommend({
-    "gini": 0.5,
-    "average_satisfaction": 35,
-    "crime_rate": 60,
-})
-```
-
-The director uses simple rule-based logic to convert global metrics into
-intervention action dictionaries.
-
-## Full Integration
+### Full Integration Runner
 
 ```python
 from synapses import Agent, DirectorAI, Environment, run_full_simulation
@@ -119,48 +179,19 @@ metrics_over_time = run_full_simulation(
 )
 ```
 
-The integrated runner coordinates agents, environment updates, causal crime,
-metrics, and Director AI interventions, then returns metrics over time.
+---
 
-## FastAPI App
+## Additional Documentation
 
-Run the API locally:
+- `docs/architecture_proposal.md`
+- `docs/spatial_grid_system.md`
+- `docs/persistence_architecture.md`
+- `docs/deployment_infrastructure.md`
 
-```bash
-uvicorn synapses.api:app --reload
-```
+---
 
-Example request:
+## Notes
 
-```bash
-curl -X POST http://127.0.0.1:8000/run_simulation \
-  -H "Content-Type: application/json" \
-  -d '{"num_agents": 3, "steps": 10, "tax_rate": 0.25}'
-```
-
-The endpoint returns `metrics_over_time` from the integrated simulation stack.
-
-Run comparison experiments:
-
-```bash
-curl -X POST http://127.0.0.1:8000/run_experiment \
-  -H "Content-Type: application/json" \
-  -d '{"num_agents": 3, "steps": 10, "tax_rate": 0.25}'
-```
-
-The experiment endpoint runs `no_director`, `random`, and `director_based`
-variants from the same starting conditions and returns comparison results.
-
-
-## React Control Panel
-
-The `control-panel/` app is a Create React App-style frontend for the FastAPI backend.
-It uses Axios for API calls and Recharts for simulation metric charts.
-
-```bash
-cd control-panel
-npm install
-npm start
-```
-
-The npm package registry was unavailable in this environment, so dependencies are declared in `control-panel/package.json` and should be installed locally when registry access is available.
+- Keep simulation logic decoupled from rendering/UI concerns.
+- Prefer deterministic seeds/config snapshots for reproducible research runs.
+- Use package-layer APIs (`synapses.*`) rather than reaching into internal modules where possible.
