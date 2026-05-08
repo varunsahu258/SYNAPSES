@@ -1,8 +1,4 @@
-"""Simple async load-testing utility for SYNAPSES API endpoints.
-
-This script keeps third-party imports lazy so the core test suite can run in
-minimal environments where optional load-test dependencies are not installed.
-"""
+"""Simple async load-testing utility for SYNAPSES API endpoints."""
 
 from __future__ import annotations
 
@@ -10,10 +6,8 @@ import argparse
 import asyncio
 import time
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
 
-if TYPE_CHECKING:
-    import aiohttp
+import aiohttp
 
 
 @dataclass(slots=True)
@@ -24,20 +18,7 @@ class LoadTestResult:
     duration_seconds: float
 
 
-def _require_aiohttp() -> Any:
-    """Import and return ``aiohttp`` or raise a clear runtime error."""
-    try:
-        import aiohttp  # type: ignore
-    except ModuleNotFoundError as exc:  # pragma: no cover - exercised by runtime usage
-        raise RuntimeError(
-            "aiohttp is required for scripts/load_test.py. "
-            "Install it with: pip install aiohttp"
-        ) from exc
-    return aiohttp
-
-
-async def _worker(session: "aiohttp.ClientSession", url: str, requests: int) -> tuple[int, int]:
-    aiohttp = _require_aiohttp()
+async def _worker(session: aiohttp.ClientSession, url: str, requests: int) -> tuple[int, int]:
     ok = 0
     fail = 0
     for _ in range(requests):
@@ -53,7 +34,6 @@ async def _worker(session: "aiohttp.ClientSession", url: str, requests: int) -> 
 
 
 async def run_load_test(url: str, concurrency: int, requests_per_worker: int) -> LoadTestResult:
-    aiohttp = _require_aiohttp()
     start = time.perf_counter()
     connector = aiohttp.TCPConnector(limit=concurrency)
     async with aiohttp.ClientSession(connector=connector) as session:

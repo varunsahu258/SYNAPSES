@@ -32,5 +32,6 @@ jobs:
         with:
           node-version: "20"
       - run: npm install
+      - run: npm ci
       - run: npm test -- --watch=false
       - run: npm run build
