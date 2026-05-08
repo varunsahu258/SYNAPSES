@@ -123,6 +123,22 @@ class IntegratedSimulationTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "zero or greater"):
             simulation.run(-1)
 
+    def test_agents_are_registered_and_move_in_grid_world(self) -> None:
+        simulation = IntegratedSimulation(
+            agents=[
+                Agent(wealth=10, health=80, satisfaction=80, position=(0, 0)),
+                Agent(wealth=20, health=80, satisfaction=80, position=(1, 0)),
+            ],
+            environment=Environment(food_supply=100, price=10, crime_rate=10),
+        )
+
+        before_positions = [agent.position for agent in simulation.agents]
+        simulation.run(1)
+        after_positions = [agent.position for agent in simulation.agents]
+
+        self.assertEqual(simulation.grid_world.agent_count, 2)
+        self.assertNotEqual(before_positions, after_positions)
+
 
 if __name__ == "__main__":
     unittest.main()
