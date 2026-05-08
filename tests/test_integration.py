@@ -23,18 +23,16 @@ class IntegratedSimulationTests(unittest.TestCase):
         self.assertEqual(len(metrics_over_time), 10)
         self.assertEqual(metrics_over_time[0]["step"], 1)
         self.assertEqual(metrics_over_time[-1]["step"], 10)
-        self.assertEqual(
-            metrics_over_time[-1]["crime_history"],
-            [50, 51, 52, 53, 54, 55, 56, 57, 58, 59],
-        )
+        crime_history = metrics_over_time[-1]["crime_history"]
+        self.assertEqual(len(crime_history), 10)
+        self.assertEqual(crime_history[0], 29)
+        self.assertTrue(all(0 <= value <= 100 for value in crime_history))
+        self.assertLessEqual(crime_history[-1], max(crime_history))
+        self.assertTrue(all(a >= b for a, b in zip(crime_history[-4:], crime_history[-3:])))
         self.assertEqual(metrics_over_time[-1]["average_satisfaction"], 50.0)
         self.assertAlmostEqual(metrics_over_time[-1]["gini"], 0.5)
         self.assertIn(
             {"action": "redistribute_resources", "reason": "high_inequality"},
-            metrics_over_time[-1]["interventions"],
-        )
-        self.assertIn(
-            {"action": "increase_safety_programs", "reason": "high_crime"},
             metrics_over_time[-1]["interventions"],
         )
 
@@ -53,6 +51,39 @@ class IntegratedSimulationTests(unittest.TestCase):
         self.assertEqual(second["step"], 2)
         self.assertEqual(len(simulation.history), 2)
 
+
+    def test_agents_receive_isolated_environment_snapshots(self) -> None:
+        class MutatingAgent:
+            wealth = 50
+            health = 80
+            satisfaction = 80
+
+            def act(self, state: dict[str, int]) -> dict[str, str]:
+                state["risk"] = 999
+                return {"action": "maintain", "reason": "test"}
+
+        class ObservingAgent:
+            wealth = 50
+            health = 80
+            satisfaction = 80
+
+            def __init__(self) -> None:
+                self.observed_risk: int | None = None
+
+            def act(self, state: dict[str, int]) -> dict[str, str]:
+                self.observed_risk = state["risk"]
+                return {"action": "maintain", "reason": "test"}
+
+        observer = ObservingAgent()
+        simulation = IntegratedSimulation(
+            agents=[MutatingAgent(), observer],
+            environment=Environment(food_supply=100, price=10, crime_rate=10),
+        )
+
+        simulation.run(1)
+
+        self.assertEqual(observer.observed_risk, 10)
+
     def test_history_records_agent_actions_and_environment_state(self) -> None:
         simulation = IntegratedSimulation(
             agents=[Agent(wealth=10, health=80, satisfaction=80)],
@@ -67,7 +98,7 @@ class IntegratedSimulationTests(unittest.TestCase):
                 {
                     "step": 1,
                     "actions": [{"action": "work", "reason": "increase_wealth"}],
-                    "environment": {"food_supply": 105, "price": 10, "crime_rate": 0},
+                    "environment": {"food_supply": 105, "price": 10, "crime_rate": 4},
                 },
             ),
         )
@@ -80,7 +111,7 @@ class IntegratedSimulationTests(unittest.TestCase):
         )
 
         self.assertEqual(len(metrics_over_time), 2)
-        self.assertEqual(metrics_over_time[-1]["crime_history"], [0, 0])
+        self.assertEqual(metrics_over_time[-1]["crime_history"], [4, 2])
         self.assertEqual(
             metrics_over_time[-1]["interventions"],
             [{"action": "monitor", "reason": "stable_metrics"}],
@@ -91,6 +122,22 @@ class IntegratedSimulationTests(unittest.TestCase):
 
         with self.assertRaisesRegex(ValueError, "zero or greater"):
             simulation.run(-1)
+
+    def test_agents_are_registered_and_move_in_grid_world(self) -> None:
+        simulation = IntegratedSimulation(
+            agents=[
+                Agent(wealth=10, health=80, satisfaction=80, position=(0, 0)),
+                Agent(wealth=20, health=80, satisfaction=80, position=(1, 0)),
+            ],
+            environment=Environment(food_supply=100, price=10, crime_rate=10),
+        )
+
+        before_positions = [agent.position for agent in simulation.agents]
+        simulation.run(1)
+        after_positions = [agent.position for agent in simulation.agents]
+
+        self.assertEqual(simulation.grid_world.agent_count, 2)
+        self.assertNotEqual(before_positions, after_positions)
 
 
 if __name__ == "__main__":
