@@ -1,5 +1,9 @@
 """Simulation engine for coordinating agents and an environment.
 
+This module provides a lightweight action-only engine used by lower-level
+workflows. For full policy experiments (director + causal crime model), use
+:class:`synapses.integration.IntegratedSimulation` via ``synapses.core.engine``.
+
 The engine is intentionally deterministic: each step reads the current
 environment, asks every agent for one action, applies those actions to the
 environment, and stores a serializable history entry.
