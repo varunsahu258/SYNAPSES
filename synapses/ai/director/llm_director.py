@@ -81,5 +81,5 @@ Do not explain your reasoning.
     def _parse_response(self, text: str) -> list[dict]:
         action = text.strip().lower().replace("-", "_")
         if action not in self.VALID_ACTIONS:
-            action = "monitor"
-        return [{"action": action, "reason": "llm_decision"}]
+            return [{"action": "monitor", "reason": "llm_fallback_invalid_action"}]
+        return [{"action": action, "reason": f"llm:{self._model}"}]
