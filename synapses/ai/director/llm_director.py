@@ -27,6 +27,8 @@ class LLMDirector:
         headers = {
             "Authorization": f"Bearer {self._api_key}",
             "Content-Type": "application/json",
+            "HTTP-Referer": "http://localhost:3000",
+            "X-Title": "SYNAPSES Control Panel",
         }
 
         try:
@@ -39,7 +41,11 @@ class LLMDirector:
         except ModuleNotFoundError:
             return self._recommend_with_urllib(payload, headers)
         except Exception as exc:
-            return [{"action": "monitor", "reason": f"llm_error:{type(exc).__name__}"}]
+            reason = "llm_error:unknown"
+            status_code = getattr(getattr(exc, "response", None), "status_code", None)
+            if status_code is not None:
+                reason = f"llm_http_{status_code}"
+            return [{"action": "monitor", "reason": reason}]
 
     def _recommend_with_urllib(self, payload: dict, headers: dict) -> list[dict]:
         import json
@@ -54,8 +60,10 @@ class LLMDirector:
                 data = json.loads(response.read().decode("utf-8"))
                 text = data["choices"][0]["message"]["content"]
                 return self._parse_response(text)
-        except (HTTPError, URLError, KeyError, json.JSONDecodeError) as exc:
-            return [{"action": "monitor", "reason": f"llm_error:{type(exc).__name__}"}]
+        except HTTPError as exc:
+            return [{"action": "monitor", "reason": f"llm_http_{exc.code}"}]
+        except (URLError, KeyError, json.JSONDecodeError):
+            return [{"action": "monitor", "reason": "llm_error:transport"}]
 
     def _build_prompt(self, metrics: dict) -> str:
         return f"""
