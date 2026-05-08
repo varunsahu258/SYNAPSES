@@ -88,9 +88,34 @@ class IntegratedSimulation:
         self._history.append(history_entry)
 
         metrics = self._metrics_entry(step_number)
-        metrics["interventions"] = self.director.recommend(metrics)
+        interventions = self.director.recommend(metrics)
+        self._apply_interventions(interventions)
+
+        metrics = self._metrics_entry(step_number)
+        metrics["interventions"] = interventions
         metrics["agent_actions"] = actions
         return metrics
+
+
+    def _apply_interventions(self, interventions: Iterable[Intervention]) -> None:
+        """Apply director interventions to the environment deterministically."""
+        for intervention in interventions:
+            action = intervention.get("action", "")
+
+            if action == "redistribute_resources":
+                self.environment.food_supply += 4
+                self.environment.price = max(1, self.environment.price - 1)
+                continue
+
+            if action == "fund_public_services":
+                self.environment.food_supply += 2
+                self.environment.crime_rate -= 3
+                continue
+
+            if action == "increase_safety_programs":
+                self.environment.crime_rate -= 5
+
+        self.environment._clamp_values()
 
     def _collect_agent_actions(self) -> list[Action]:
         """Call every agent with the current environment-derived state."""

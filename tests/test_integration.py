@@ -25,16 +25,12 @@ class IntegratedSimulationTests(unittest.TestCase):
         self.assertEqual(metrics_over_time[-1]["step"], 10)
         self.assertEqual(
             metrics_over_time[-1]["crime_history"],
-            [50, 51, 52, 53, 54, 55, 56, 57, 58, 59],
+            [50, 49, 48, 47, 46, 45, 44, 43, 42, 41],
         )
         self.assertEqual(metrics_over_time[-1]["average_satisfaction"], 50.0)
         self.assertAlmostEqual(metrics_over_time[-1]["gini"], 0.5)
         self.assertIn(
             {"action": "redistribute_resources", "reason": "high_inequality"},
-            metrics_over_time[-1]["interventions"],
-        )
-        self.assertIn(
-            {"action": "increase_safety_programs", "reason": "high_crime"},
             metrics_over_time[-1]["interventions"],
         )
 
