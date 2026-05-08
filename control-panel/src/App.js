@@ -134,7 +134,12 @@ function App() {
     try {
       const [nextResult, nextSimulation] = await Promise.all([runExperiment(form), runSimulation(form)]);
       setResult(nextResult);
-      setSimulationResult(nextSimulation);
+      try {
+        const nextSimulation = await runSimulation(form);
+        setSimulationResult(nextSimulation);
+      } catch (_simulationError) {
+        setSimulationResult(null);
+      }
       setProgress(100);
       setStatus(`Experiment complete for ${form.numAgents} agents over ${form.steps} steps`);
     } catch (error) {
