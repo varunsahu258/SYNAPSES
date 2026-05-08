@@ -3,12 +3,27 @@
 from __future__ import annotations
 
 from typing import Any
+from pathlib import Path
 
 from fastapi import FastAPI, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, ValidationError
 
 from synapses.application.services import ExperimentService, SimulationService
+from synapses.ai.director import LLMDirector, RLDirectorAdapter, RewardWeights, evaluate_trained_model, train_director_ppo
+from synapses.director import DirectorAI
+from synapses.environment import Environment
+from synapses.experiments import (
+    CounterfactualEngine,
+    ExperimentRunRecord,
+    ExperimentRunner,
+    ExperimentSpec,
+    aggregate_runs,
+    build_comparison_report,
+    export_records_csv,
+    parameter_sweep_grid,
+)
+from synapses.experiments_legacy import build_agents
 
 app = FastAPI(title="SYNAPSES Simulation API", version="0.1.0")
 app.add_middleware(
@@ -24,10 +39,17 @@ class SimulationRequest(BaseModel):
     num_agents: int = Field(..., ge=1)
     steps: int = Field(..., ge=0)
     tax_rate: float = Field(0.0, ge=0.0, le=1.0)
+    gini_threshold: float = Field(0.4, ge=0.0, le=1.0)
+    satisfaction_threshold: float = Field(40.0, ge=0.0, le=100.0)
+    crime_threshold: float = Field(50.0, ge=0.0, le=100.0)
+    director_mode: str = Field("rule_based")
+    openrouter_api_key: str | None = None
+    rl_model_path: str | None = None
 
 
 class SimulationResponse(BaseModel):
     metrics_over_time: list[dict[str, Any]]
+    grid_state: dict[str, Any]
 
 
 class ExperimentResponse(BaseModel):
@@ -35,19 +57,97 @@ class ExperimentResponse(BaseModel):
     comparison: dict[str, dict[str, Any]]
 
 
+class SweepRequest(BaseModel):
+    num_agents: list[int] = Field(default_factory=lambda: [2, 4, 8])
+    steps: list[int] = Field(default_factory=lambda: [5, 10])
+    tax_rate: list[float] = Field(default_factory=lambda: [0.0, 0.25])
+    runs_per_spec: int = Field(2, ge=1, le=50)
+
+
+class CounterfactualRequest(BaseModel):
+    num_agents: int = Field(..., ge=1)
+    steps: int = Field(..., ge=0)
+    tax_rate: float = Field(0.0, ge=0.0, le=1.0)
+
+
+class RLTrainRequest(BaseModel):
+    output_dir: str = "artifacts/rl_runs"
+    total_timesteps: int = Field(5000, ge=1000)
+    episode_length: int = Field(100, ge=10)
+    seed: int = 42
+    stability: float = 1.8
+    inequality_penalty: float = 1.3
+    suffering_penalty: float = 1.4
+    crime_penalty: float = 1.2
+    sustainability: float = 1.0
+
+
 _simulation_service = SimulationService()
 _experiment_service = ExperimentService()
 
 
+def _spatial_state(simulation: Any) -> dict[str, Any]:
+    world = simulation.grid_world
+    agents = [
+        {"agent_id": str(index), "position": list(agent.position)}
+        for index, agent in enumerate(simulation.agents)
+    ]
+    cells = [
+        {"coord": list(coord), "resource": cell.resource, "crime": cell.crime}
+        for coord, cell in world._cells.items()
+    ]
+    return {
+        "width": world.width,
+        "height": world.height,
+        "cell_size": world.cell_size,
+        "agents": agents,
+        "cells": cells,
+    }
+
+
+def _build_director(request: SimulationRequest) -> DirectorAI:
+    if request.director_mode == "llm":
+        if not request.openrouter_api_key:
+            raise ValueError("openrouter_api_key is required for LLM director mode.")
+        return LLMDirector(api_key=request.openrouter_api_key)
+    if request.director_mode == "rl":
+        if not request.rl_model_path:
+            raise ValueError("rl_model_path is required for RL director mode.")
+        return RLDirectorAdapter(model_path=request.rl_model_path)
+    return DirectorAI(
+        gini_threshold=request.gini_threshold,
+        satisfaction_threshold=request.satisfaction_threshold,
+        crime_threshold=request.crime_threshold,
+    )
+
+
+def _build_simulation(request: SimulationRequest) -> Any:
+    simulation = _simulation_service.build_simulation(
+        num_agents=request.num_agents,
+        tax_rate=request.tax_rate,
+    )
+    simulation.director = _build_director(request)
+    return simulation
+
+
 @app.post("/run_simulation", response_model=SimulationResponse)
 def run_simulation(request: SimulationRequest) -> SimulationResponse:
+    try:
+        simulation = _build_simulation(request)
+        metrics = simulation.run(request.steps)
+    except Exception as exc:
+        return SimulationResponse(metrics_over_time=[{"error": str(exc)}], grid_state={})
     return SimulationResponse(
-        metrics_over_time=_simulation_service.run_simulation(
-            num_agents=request.num_agents,
-            steps=request.steps,
-            tax_rate=request.tax_rate,
-        )
+        metrics_over_time=metrics,
+        grid_state=_spatial_state(simulation),
     )
+
+
+@app.post("/grid_state")
+def get_grid_state(request: SimulationRequest) -> dict[str, Any]:
+    simulation = _build_simulation(request)
+    simulation.run(request.steps)
+    return _spatial_state(simulation)
 
 
 @app.websocket("/ws/run_simulation")
@@ -62,15 +162,20 @@ async def stream_simulation(websocket: WebSocket) -> None:
         return
 
     metrics_over_time: list[dict[str, Any]] = []
-    simulation = _simulation_service.build_simulation(
-        num_agents=request.num_agents,
-        tax_rate=request.tax_rate,
-    )
+    simulation = _build_simulation(request)
     for metrics in simulation.iter_steps(request.steps):
         metrics_over_time.append(metrics)
-        await websocket.send_json({"type": "step", "metrics": metrics})
+        await websocket.send_json(
+            {"type": "step", "metrics": metrics, "spatial": _spatial_state(simulation)}
+        )
 
-    await websocket.send_json({"type": "complete", "metrics_over_time": metrics_over_time})
+    await websocket.send_json(
+        {
+            "type": "complete",
+            "metrics_over_time": metrics_over_time,
+            "spatial": _spatial_state(simulation),
+        }
+    )
     await websocket.close()
 
 
@@ -83,3 +188,72 @@ def run_experiment_endpoint(request: SimulationRequest) -> ExperimentResponse:
             tax_rate=request.tax_rate,
         )
     )
+
+
+@app.post("/experiments/parameter_sweep")
+def run_parameter_sweep(request: SweepRequest) -> dict[str, Any]:
+    grid = parameter_sweep_grid(
+        {
+            "num_agents": request.num_agents,
+            "steps": request.steps,
+            "tax_rate": request.tax_rate,
+        }
+    )
+    specs = [
+        ExperimentSpec(experiment_id=f"sweep_{idx}", parameters=params, seed=42 + idx)
+        for idx, params in enumerate(grid)
+    ]
+
+    runner = ExperimentRunner(
+        lambda params: _experiment_service.run_experiment(
+            num_agents=int(params["num_agents"]),
+            steps=int(params["steps"]),
+            tax_rate=float(params["tax_rate"]),
+        )["comparison"]["director_based"]
+    )
+    records: list[ExperimentRunRecord] = runner.run_batch(specs, request.runs_per_spec)
+    summaries = aggregate_runs(records)
+    report = build_comparison_report(summaries)
+    Path("artifacts").mkdir(parents=True, exist_ok=True)
+    csv_path = export_records_csv(records, "artifacts/parameter_sweep.csv")
+    return {"report": report, "csv_path": str(csv_path), "records": len(records)}
+
+
+@app.post("/counterfactual/run")
+def run_counterfactual(request: CounterfactualRequest) -> dict[str, Any]:
+    agents = build_agents(request.num_agents, request.tax_rate)
+    engine = CounterfactualEngine(base_agents=agents, base_environment=Environment())
+    baseline = engine.create_branch("baseline")
+    policy = engine.create_branch("policy")
+    policy.add_intervention(1, lambda env, _agents, _rng: setattr(env, "food_supply", env.food_supply + 10))
+    engine.run_all(request.steps)
+    return {
+        "baseline_steps": len(baseline.metrics()),
+        "policy_steps": len(policy.metrics()),
+        "comparison": engine.compare("baseline"),
+    }
+
+
+@app.post("/director/rl/train")
+def train_director_endpoint(request: RLTrainRequest) -> dict[str, Any]:
+    weights = RewardWeights(
+        stability=request.stability,
+        inequality_penalty=request.inequality_penalty,
+        suffering_penalty=request.suffering_penalty,
+        crime_penalty=request.crime_penalty,
+        sustainability=request.sustainability,
+    )
+    # Reward weights are accepted for runtime shaping; training function currently uses env defaults.
+    _ = weights
+    model_path = train_director_ppo(
+        output_dir=request.output_dir,
+        total_timesteps=request.total_timesteps,
+        episode_length=request.episode_length,
+        seed=request.seed,
+    )
+    return {"model_path": str(model_path)}
+
+
+@app.post("/director/rl/evaluate")
+def evaluate_director_endpoint(model_path: str, episodes: int = 3, episode_length: int = 100) -> dict[str, Any]:
+    return evaluate_trained_model(model_path=model_path, episodes=episodes, episode_length=episode_length)

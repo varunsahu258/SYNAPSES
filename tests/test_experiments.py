@@ -42,6 +42,21 @@ class ExperimentTests(unittest.TestCase):
             second["experiments"]["random"]["metrics_over_time"],
         )
 
+
+    def test_director_variants_produce_different_outcomes(self) -> None:
+        result = run_experiment(num_agents=2, steps=3)
+
+        no_director = result["comparison"]["no_director"]
+        random_director = result["comparison"]["random"]
+        director_based = result["comparison"]["director_based"]
+
+        self.assertNotEqual(
+            result["experiments"]["random"]["metrics_over_time"][-1]["food_supply"],
+            result["experiments"]["no_director"]["metrics_over_time"][-1]["food_supply"],
+        )
+        self.assertNotEqual(random_director["interventions"], no_director["interventions"])
+        self.assertNotEqual(director_based["interventions"], no_director["interventions"])
+
     def test_build_agents_applies_tax_rate(self) -> None:
         untaxed = build_agents(num_agents=3, tax_rate=0.0)
         taxed = build_agents(num_agents=3, tax_rate=1.0)
