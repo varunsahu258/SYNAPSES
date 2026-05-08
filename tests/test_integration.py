@@ -23,11 +23,10 @@ class IntegratedSimulationTests(unittest.TestCase):
         self.assertEqual(len(metrics_over_time), 10)
         self.assertEqual(metrics_over_time[0]["step"], 1)
         self.assertEqual(metrics_over_time[-1]["step"], 10)
-        crime_history = metrics_over_time[-1]["crime_history"]
-        self.assertEqual(len(crime_history), 10)
-        self.assertEqual(crime_history[0], 50)
-        self.assertEqual(crime_history[-1], 41)
-        self.assertTrue(all(a >= b for a, b in zip(crime_history, crime_history[1:])))
+        self.assertEqual(
+            metrics_over_time[-1]["crime_history"],
+            [50, 49, 48, 47, 46, 45, 44, 43, 42, 41],
+        )
         self.assertEqual(metrics_over_time[-1]["average_satisfaction"], 50.0)
         self.assertAlmostEqual(metrics_over_time[-1]["gini"], 0.5)
         self.assertIn(
@@ -97,7 +96,7 @@ class IntegratedSimulationTests(unittest.TestCase):
                 {
                     "step": 1,
                     "actions": [{"action": "work", "reason": "increase_wealth"}],
-                    "environment": {"food_supply": 105, "price": 10, "crime_rate": 0},
+                    "environment": {"food_supply": 105, "price": 10, "crime_rate": 4},
                 },
             ),
         )
@@ -110,7 +109,7 @@ class IntegratedSimulationTests(unittest.TestCase):
         )
 
         self.assertEqual(len(metrics_over_time), 2)
-        self.assertEqual(metrics_over_time[-1]["crime_history"], [0, 0])
+        self.assertEqual(metrics_over_time[-1]["crime_history"], [4, 2])
         self.assertEqual(
             metrics_over_time[-1]["interventions"],
             [{"action": "monitor", "reason": "stable_metrics"}],

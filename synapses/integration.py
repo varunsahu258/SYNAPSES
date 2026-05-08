@@ -94,6 +94,10 @@ class IntegratedSimulation:
         self._crime_history.append(self.environment.crime_rate)
 
         metrics = self._metrics_entry(step_number)
+        interventions = self.director.recommend(metrics)
+        self._apply_interventions(interventions)
+
+        metrics = self._metrics_entry(step_number)
         metrics["interventions"] = interventions
         metrics["agent_actions"] = actions
         return metrics
@@ -135,11 +139,14 @@ class IntegratedSimulation:
         }
 
     def _apply_causal_crime_rate(self) -> None:
-        """Project crime from causal inputs before director interventions."""
+        """Blend causal crime projection with current crime state."""
         inequality_score = int(round(self._gini() * 100))
-        self.environment.crime_rate = crime_from_price_and_inequality(
+        projected_crime = crime_from_price_and_inequality(
             price=self.environment.price,
             inequality=inequality_score,
+        )
+        self.environment.crime_rate = int(
+            round((self.environment.crime_rate + projected_crime) / 2)
         )
         self.environment._clamp_values()
 
