@@ -19,11 +19,13 @@ class Agent:
         wealth: Numeric measure of available resources.
         health: Numeric measure of physical condition.
         satisfaction: Numeric measure of contentment.
+        position: Current grid-cell position used by spatial simulations.
     """
 
     wealth: int = 50
     health: int = 50
     satisfaction: int = 50
+    position: tuple[int, int] = (0, 0)
 
     def act(self, environment_state: Mapping[str, Any] | None) -> dict[str, str]:
         """Choose one deterministic action from the current environment state.
