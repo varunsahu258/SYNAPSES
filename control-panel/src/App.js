@@ -132,13 +132,37 @@ function App() {
     setStatus(`Running experiment for ${form.numAgents} agents over ${form.steps} steps...`);
 
     try {
-      const [nextResult, nextSimulation] = await Promise.all([runExperiment(form), runSimulation(form)]);
-      setResult(nextResult);
-      try {
+      if (form.directorMode === 'llm') {
         const nextSimulation = await runSimulation(form);
         setSimulationResult(nextSimulation);
-      } catch (_simulationError) {
-        setSimulationResult(null);
+        const timeline = nextSimulation.metrics_over_time ?? [];
+        const final = timeline[timeline.length - 1] ?? {};
+        setResult({
+          experiments: {
+            no_director: { metrics_over_time: [] },
+            random: { metrics_over_time: [] },
+            director_based: { metrics_over_time: timeline },
+          },
+          comparison: {
+            no_director: {},
+            random: {},
+            director_based: {
+              gini: final.gini,
+              crime_rate: final.crime_rate,
+              average_satisfaction: final.average_satisfaction,
+              interventions: final.interventions ?? [],
+            },
+          },
+        });
+      } else {
+        const nextResult = await runExperiment(form);
+        setResult(nextResult);
+        try {
+          const nextSimulation = await runSimulation(form);
+          setSimulationResult(nextSimulation);
+        } catch (_simulationError) {
+          setSimulationResult(null);
+        }
       }
       setProgress(100);
       setStatus(`Experiment complete for ${form.numAgents} agents over ${form.steps} steps`);
