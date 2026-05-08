@@ -3,7 +3,6 @@
 import unittest
 
 from synapses.experiments import build_agents, run_experiment
-from synapses import build_agents, run_experiment
 
 
 class ExperimentTests(unittest.TestCase):

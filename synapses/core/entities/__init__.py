@@ -1,0 +1,6 @@
+"""Core domain entities for SYNAPSES."""
+
+from ...agent import Agent
+from ...environment import Environment
+
+__all__ = ["Agent", "Environment"]

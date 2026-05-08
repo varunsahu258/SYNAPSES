@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: synapses-config
+  namespace: synapses
+data:
+  SYNAPSES_LOG_LEVEL: "INFO"
+  SYNAPSES_ENV: "production"
