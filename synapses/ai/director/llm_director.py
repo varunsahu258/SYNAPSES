@@ -36,8 +36,26 @@ class LLMDirector:
             response.raise_for_status()
             text = response.json()["choices"][0]["message"]["content"]
             return self._parse_response(text)
-        except Exception:
-            return [{"action": "monitor", "reason": "llm_unavailable"}]
+        except ModuleNotFoundError:
+            return self._recommend_with_urllib(payload, headers)
+        except Exception as exc:
+            return [{"action": "monitor", "reason": f"llm_error:{type(exc).__name__}"}]
+
+    def _recommend_with_urllib(self, payload: dict, headers: dict) -> list[dict]:
+        import json
+        from urllib.error import HTTPError, URLError
+        from urllib.request import Request, urlopen
+
+        body = json.dumps(payload).encode("utf-8")
+        request = Request(self._endpoint, data=body, headers=headers, method="POST")
+
+        try:
+            with urlopen(request, timeout=30) as response:
+                data = json.loads(response.read().decode("utf-8"))
+                text = data["choices"][0]["message"]["content"]
+                return self._parse_response(text)
+        except (HTTPError, URLError, KeyError, json.JSONDecodeError) as exc:
+            return [{"action": "monitor", "reason": f"llm_error:{type(exc).__name__}"}]
 
     def _build_prompt(self, metrics: dict) -> str:
         return f"""
