@@ -63,6 +63,8 @@ test('sends slider values to the experiment API', async () => {
       giniThreshold: 0.4,
       satisfactionThreshold: 40,
       crimeThreshold: 50,
+      directorMode: 'rule_based',
+      openrouterApiKey: '',
     });
   });
   expect(

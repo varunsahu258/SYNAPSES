@@ -13,6 +13,8 @@ const DEFAULT_FORM = {
   giniThreshold: 0.4,
   satisfactionThreshold: 40,
   crimeThreshold: 50,
+  directorMode: 'rule_based',
+  openrouterApiKey: '',
 };
 
 const SLIDER_FIELDS = [
@@ -108,17 +110,24 @@ function App() {
   const [isRunning, setIsRunning] = useState(false);
   const [progress, setProgress] = useState(0);
   const [simulationResult, setSimulationResult] = useState(null);
+  const [uiError, setUiError] = useState('');
 
   function updateField(field, value) {
     setForm((current) => ({
       ...current,
-      [field]: Number(value),
+      [field]: typeof current[field] === 'number' ? Number(value) : value,
     }));
   }
 
   async function handleRunExperiment(event) {
     event.preventDefault();
     setIsRunning(true);
+    setUiError('');
+    if (form.directorMode === 'llm' && !form.openrouterApiKey.trim()) {
+      setUiError('OpenRouter API key is required for LLM Director mode.');
+      setIsRunning(false);
+      return;
+    }
     setProgress(10);
     setStatus(`Running experiment for ${form.numAgents} agents over ${form.steps} steps...`);
 
@@ -230,6 +239,27 @@ function App() {
                   </span>
                 </div>
               ))}
+              <label className="flex items-center gap-2 text-sm font-bold text-slate-700">
+                <input
+                  checked={form.directorMode === 'llm'}
+                  type="checkbox"
+                  onChange={(event) => updateField('directorMode', event.target.checked ? 'llm' : 'rule_based')}
+                />
+                Use LLM Director
+              </label>
+              {form.directorMode === 'llm' && (
+                <div className="grid gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3">
+                  <p className="text-xs font-black text-amber-800">Using NVIDIA Nemotron via OpenRouter</p>
+                  <p className="text-xs font-semibold text-amber-700">LLM mode may respond more slowly due to API latency.</p>
+                  <input
+                    className="rounded-lg border border-amber-300 bg-white px-3 py-2 text-sm"
+                    placeholder="OpenRouter API key"
+                    type="password"
+                    value={form.openrouterApiKey}
+                    onChange={(event) => updateField('openrouterApiKey', event.target.value)}
+                  />
+                </div>
+              )}
 
             </div>
 
@@ -283,6 +313,7 @@ function App() {
             <p className="rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm font-bold text-blue-800" role="status">
               {status}
             </p>
+            {uiError && <p className="rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-sm font-bold text-red-700">{uiError}</p>}
 
             <section className="grid gap-6 2xl:grid-cols-[1fr_420px]">
               <MetricsChart experiments={experiments} />

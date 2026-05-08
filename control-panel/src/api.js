@@ -9,7 +9,16 @@ const client = axios.create({
   },
 });
 
-function simulationPayload({ numAgents, steps, taxRate, giniThreshold, satisfactionThreshold, crimeThreshold }) {
+function simulationPayload({
+  numAgents,
+  steps,
+  taxRate,
+  giniThreshold,
+  satisfactionThreshold,
+  crimeThreshold,
+  directorMode,
+  openrouterApiKey,
+}) {
   return {
     num_agents: numAgents,
     steps,
@@ -17,6 +26,8 @@ function simulationPayload({ numAgents, steps, taxRate, giniThreshold, satisfact
     gini_threshold: giniThreshold,
     satisfaction_threshold: satisfactionThreshold,
     crime_threshold: crimeThreshold,
+    director_mode: directorMode,
+    openrouter_api_key: openrouterApiKey,
   };
 }
 

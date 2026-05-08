@@ -10,6 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, ValidationError
 
 from synapses.application.services import ExperimentService, SimulationService
+from synapses.ai.director import LLMDirector, RLDirectorAdapter, RewardWeights, evaluate_trained_model, train_director_ppo
 from synapses.director import DirectorAI
 from synapses.environment import Environment
 from synapses.experiments import (
@@ -41,6 +42,9 @@ class SimulationRequest(BaseModel):
     gini_threshold: float = Field(0.4, ge=0.0, le=1.0)
     satisfaction_threshold: float = Field(40.0, ge=0.0, le=100.0)
     crime_threshold: float = Field(50.0, ge=0.0, le=100.0)
+    director_mode: str = Field("rule_based")
+    openrouter_api_key: str | None = None
+    rl_model_path: str | None = None
 
 
 class SimulationResponse(BaseModel):
@@ -64,6 +68,18 @@ class CounterfactualRequest(BaseModel):
     num_agents: int = Field(..., ge=1)
     steps: int = Field(..., ge=0)
     tax_rate: float = Field(0.0, ge=0.0, le=1.0)
+
+
+class RLTrainRequest(BaseModel):
+    output_dir: str = "artifacts/rl_runs"
+    total_timesteps: int = Field(5000, ge=1000)
+    episode_length: int = Field(100, ge=10)
+    seed: int = 42
+    stability: float = 1.8
+    inequality_penalty: float = 1.3
+    suffering_penalty: float = 1.4
+    crime_penalty: float = 1.2
+    sustainability: float = 1.0
 
 
 _simulation_service = SimulationService()
@@ -90,6 +106,14 @@ def _spatial_state(simulation: Any) -> dict[str, Any]:
 
 
 def _build_director(request: SimulationRequest) -> DirectorAI:
+    if request.director_mode == "llm":
+        if not request.openrouter_api_key:
+            raise ValueError("openrouter_api_key is required for LLM director mode.")
+        return LLMDirector(api_key=request.openrouter_api_key)
+    if request.director_mode == "rl":
+        if not request.rl_model_path:
+            raise ValueError("rl_model_path is required for RL director mode.")
+        return RLDirectorAdapter(model_path=request.rl_model_path)
     return DirectorAI(
         gini_threshold=request.gini_threshold,
         satisfaction_threshold=request.satisfaction_threshold,
@@ -108,7 +132,10 @@ def _build_simulation(request: SimulationRequest) -> Any:
 
 @app.post("/run_simulation", response_model=SimulationResponse)
 def run_simulation(request: SimulationRequest) -> SimulationResponse:
-    simulation = _build_simulation(request)
+    try:
+        simulation = _build_simulation(request)
+    except ValueError as exc:
+        return SimulationResponse(metrics_over_time=[{"error": str(exc)}], grid_state={})
     metrics = simulation.run(request.steps)
     return SimulationResponse(
         metrics_over_time=metrics,
@@ -205,3 +232,28 @@ def run_counterfactual(request: CounterfactualRequest) -> dict[str, Any]:
         "policy_steps": len(policy.metrics()),
         "comparison": engine.compare("baseline"),
     }
+
+
+@app.post("/director/rl/train")
+def train_director_endpoint(request: RLTrainRequest) -> dict[str, Any]:
+    weights = RewardWeights(
+        stability=request.stability,
+        inequality_penalty=request.inequality_penalty,
+        suffering_penalty=request.suffering_penalty,
+        crime_penalty=request.crime_penalty,
+        sustainability=request.sustainability,
+    )
+    # Reward weights are accepted for runtime shaping; training function currently uses env defaults.
+    _ = weights
+    model_path = train_director_ppo(
+        output_dir=request.output_dir,
+        total_timesteps=request.total_timesteps,
+        episode_length=request.episode_length,
+        seed=request.seed,
+    )
+    return {"model_path": str(model_path)}
+
+
+@app.post("/director/rl/evaluate")
+def evaluate_director_endpoint(model_path: str, episodes: int = 3, episode_length: int = 100) -> dict[str, Any]:
+    return evaluate_trained_model(model_path=model_path, episodes=episodes, episode_length=episode_length)
