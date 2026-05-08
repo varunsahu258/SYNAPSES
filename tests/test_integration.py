@@ -96,7 +96,7 @@ class IntegratedSimulationTests(unittest.TestCase):
                 {
                     "step": 1,
                     "actions": [{"action": "work", "reason": "increase_wealth"}],
-                    "environment": {"food_supply": 105, "price": 10, "crime_rate": 0},
+                    "environment": {"food_supply": 105, "price": 10, "crime_rate": 4},
                 },
             ),
         )
@@ -109,7 +109,7 @@ class IntegratedSimulationTests(unittest.TestCase):
         )
 
         self.assertEqual(len(metrics_over_time), 2)
-        self.assertEqual(metrics_over_time[-1]["crime_history"], [0, 0])
+        self.assertEqual(metrics_over_time[-1]["crime_history"], [4, 2])
         self.assertEqual(
             metrics_over_time[-1]["interventions"],
             [{"action": "monitor", "reason": "stable_metrics"}],
