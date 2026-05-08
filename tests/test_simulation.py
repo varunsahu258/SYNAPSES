@@ -2,7 +2,7 @@
 
 import unittest
 
-from synapses import Agent, Environment, SimulationEngine
+from synapses import Agent, AgentSignalConfig, Environment, SimulationEngine
 
 
 class SimulationEngineTests(unittest.TestCase):
@@ -64,6 +64,37 @@ class SimulationEngineTests(unittest.TestCase):
         engine = SimulationEngine(agents=[Agent()], environment=Environment())
 
         self.assertEqual(engine.run(0), [])
+
+
+    def test_custom_signal_config_changes_agent_decisions(self) -> None:
+        engine = SimulationEngine(
+            agents=[Agent(wealth=95, health=90, satisfaction=90)],
+            environment=Environment(food_supply=120, price=10, crime_rate=10),
+            signal_config=AgentSignalConfig(risk_scale=8.0),
+        )
+
+        history = engine.run(1)
+
+        self.assertEqual(
+            history[0]["actions"],
+            [{"action": "rest", "reason": "protect_health"}],
+        )
+
+    def test_signal_config_clamps_negative_derived_values(self) -> None:
+        engine = SimulationEngine(
+            agents=[],
+            environment=Environment(food_supply=5, price=10, crime_rate=80),
+            signal_config=AgentSignalConfig(
+                risk_scale=1.0,
+                opportunity_price_weight=2.5,
+                social_baseline=20,
+            ),
+        )
+
+        derived = engine._agent_environment_state()
+
+        self.assertEqual(derived["opportunity"], 0)
+        self.assertEqual(derived["social"], 0)
 
     def test_negative_steps_are_rejected(self) -> None:
         engine = SimulationEngine()
