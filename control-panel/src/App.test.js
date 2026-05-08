@@ -1,10 +1,11 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 
 import App from './App';
-import { runExperiment } from './api';
+import { runExperiment, runSimulation } from './api';
 
 jest.mock('./api', () => ({
   runExperiment: jest.fn(),
+  runSimulation: jest.fn(),
 }));
 
 const EXPERIMENT_RESPONSE = {
@@ -46,6 +47,7 @@ test('renders the run experiment control panel', () => {
 
 test('sends slider values to the experiment API', async () => {
   runExperiment.mockResolvedValue({ experiments: {}, comparison: {} });
+  runSimulation.mockResolvedValue({ metrics_over_time: [], grid_state: { width: 1, height: 1, agents: [] } });
 
   render(<App />);
 
@@ -58,6 +60,9 @@ test('sends slider values to the experiment API', async () => {
       numAgents: 12,
       steps: 24,
       taxRate: 0.25,
+      giniThreshold: 0.4,
+      satisfactionThreshold: 40,
+      crimeThreshold: 50,
     });
   });
   expect(
@@ -67,6 +72,7 @@ test('sends slider values to the experiment API', async () => {
 
 test('plots experiment lines from the API response with labels and legends', async () => {
   runExperiment.mockResolvedValue(EXPERIMENT_RESPONSE);
+  runSimulation.mockResolvedValue({ metrics_over_time: [], grid_state: { width: 1, height: 1, agents: [] } });
 
   render(<App />);
 
