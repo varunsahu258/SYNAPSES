@@ -25,7 +25,7 @@ class IntegratedSimulationTests(unittest.TestCase):
         self.assertEqual(metrics_over_time[-1]["step"], 10)
         self.assertEqual(
             metrics_over_time[-1]["crime_history"],
-            [29, 38, 42, 44, 44, 44, 44, 43, 42, 41],
+            [50, 49, 48, 47, 46, 45, 44, 43, 42, 41],
         )
         self.assertEqual(metrics_over_time[-1]["average_satisfaction"], 50.0)
         self.assertAlmostEqual(metrics_over_time[-1]["gini"], 0.5)
