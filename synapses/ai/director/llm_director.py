@@ -16,27 +16,28 @@ class LLMDirector:
         self._endpoint = "https://openrouter.ai/api/v1/chat/completions"
 
     def recommend(self, global_metrics: dict | None) -> list[dict]:
-        import requests
-
         metrics = global_metrics or {}
         prompt = self._build_prompt(metrics)
-        response = requests.post(
-            self._endpoint,
-            headers={
-                "Authorization": f"Bearer {self._api_key}",
-                "Content-Type": "application/json",
-            },
-            json={
-                "model": self._model,
-                "messages": [{"role": "user", "content": prompt}],
-                "temperature": 0.2,
-                "max_tokens": 64,
-            },
-            timeout=30,
-        )
-        response.raise_for_status()
-        text = response.json()["choices"][0]["message"]["content"]
-        return self._parse_response(text)
+        payload = {
+            "model": self._model,
+            "messages": [{"role": "user", "content": prompt}],
+            "temperature": 0.2,
+            "max_tokens": 64,
+        }
+        headers = {
+            "Authorization": f"Bearer {self._api_key}",
+            "Content-Type": "application/json",
+        }
+
+        try:
+            import requests
+
+            response = requests.post(self._endpoint, headers=headers, json=payload, timeout=30)
+            response.raise_for_status()
+            text = response.json()["choices"][0]["message"]["content"]
+            return self._parse_response(text)
+        except Exception:
+            return [{"action": "monitor", "reason": "llm_unavailable"}]
 
     def _build_prompt(self, metrics: dict) -> str:
         return f"""

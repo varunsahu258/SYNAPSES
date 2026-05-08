@@ -134,9 +134,9 @@ def _build_simulation(request: SimulationRequest) -> Any:
 def run_simulation(request: SimulationRequest) -> SimulationResponse:
     try:
         simulation = _build_simulation(request)
-    except ValueError as exc:
+        metrics = simulation.run(request.steps)
+    except Exception as exc:
         return SimulationResponse(metrics_over_time=[{"error": str(exc)}], grid_state={})
-    metrics = simulation.run(request.steps)
     return SimulationResponse(
         metrics_over_time=metrics,
         grid_state=_spatial_state(simulation),
