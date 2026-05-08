@@ -94,10 +94,6 @@ class IntegratedSimulation:
         self._crime_history.append(self.environment.crime_rate)
 
         metrics = self._metrics_entry(step_number)
-        interventions = self.director.recommend(metrics)
-        self._apply_interventions(interventions)
-
-        metrics = self._metrics_entry(step_number)
         metrics["interventions"] = interventions
         metrics["agent_actions"] = actions
         return metrics
