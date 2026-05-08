@@ -5,6 +5,10 @@ module to preserve backward compatibility during incremental refactor.
 """
 
 from synapses.experiments.counterfactual import CounterfactualBranch, CounterfactualEngine, WorldSnapshot
+from synapses.experiments_legacy import NoDirector, RandomDirector, build_agents, run_experiment
+
+__all__ = ["NoDirector", "RandomDirector", "build_agents", "run_experiment", "CounterfactualBranch", "CounterfactualEngine", "WorldSnapshot"]
+
 from synapses.experiments.orchestration import (
     AggregateMetric,
     ExperimentRunRecord,
@@ -28,6 +32,8 @@ __all__ = [
     "CounterfactualBranch",
     "CounterfactualEngine",
     "WorldSnapshot",
+
+__all__ += [
     "AggregateMetric",
     "ExperimentRunRecord",
     "ExperimentRunner",
