@@ -1,0 +1,27 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: synapses-worker
+  namespace: synapses
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: synapses-worker
+  template:
+    metadata:
+      labels:
+        app: synapses-worker
+    spec:
+      containers:
+        - name: worker
+          image: ghcr.io/example/synapses-api:latest
+          command: ["python", "-m", "synapses.workflow"]
+          envFrom:
+            - configMapRef:
+                name: synapses-config
+            - secretRef:
+                name: synapses-secrets
+          securityContext:
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
