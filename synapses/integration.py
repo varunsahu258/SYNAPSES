@@ -14,7 +14,7 @@ from .agent import Agent
 from .causal import crime_from_price_and_inequality
 from .director import DirectorAI, Intervention
 from .environment import Environment
-from .metrics import average_satisfaction, gini_coefficient, track_crime
+from .metrics import average_satisfaction, gini_coefficient
 
 Action = dict[str, str]
 MetricsEntry = dict[str, Any]
@@ -46,6 +46,7 @@ class IntegratedSimulation:
         self.environment = environment or Environment()
         self.director = director or DirectorAI()
         self._history: list[HistoryEntry] = []
+        self._crime_history: list[int] = []
 
     @property
     def history(self) -> tuple[HistoryEntry, ...]:
@@ -84,8 +85,13 @@ class IntegratedSimulation:
         self.environment.update(actions)
         self._apply_causal_crime_rate()
 
+        metrics = self._metrics_entry(step_number)
+        interventions = self.director.recommend(metrics)
+        self._apply_interventions(interventions)
+
         history_entry = self._history_entry(step_number, actions)
         self._history.append(history_entry)
+        self._crime_history.append(self.environment.crime_rate)
 
         metrics = self._metrics_entry(step_number)
         interventions = self.director.recommend(metrics)
@@ -120,7 +126,7 @@ class IntegratedSimulation:
     def _collect_agent_actions(self) -> list[Action]:
         """Call every agent with the current environment-derived state."""
         environment_state = self._agent_environment_state()
-        return [agent.act(environment_state) for agent in self.agents]
+        return [agent.act(dict(environment_state)) for agent in self.agents]
 
     def _agent_environment_state(self) -> dict[str, int]:
         """Translate environment values into signals used by agents."""
@@ -133,12 +139,16 @@ class IntegratedSimulation:
         }
 
     def _apply_causal_crime_rate(self) -> None:
-        """Update environment crime using crime = f(price, inequality)."""
+        """Blend causal crime projection with current crime state."""
         inequality_score = int(round(self._gini() * 100))
-        self.environment.crime_rate = crime_from_price_and_inequality(
+        projected_crime = crime_from_price_and_inequality(
             price=self.environment.price,
             inequality=inequality_score,
         )
+        self.environment.crime_rate = int(
+            round((self.environment.crime_rate + projected_crime) / 2)
+        )
+        self.environment._clamp_values()
 
     def _history_entry(self, step_number: int, actions: list[Action]) -> HistoryEntry:
         """Build one raw state-history entry."""
@@ -150,8 +160,8 @@ class IntegratedSimulation:
 
     def _metrics_entry(self, step_number: int) -> MetricsEntry:
         """Build one metrics-over-time entry from current simulation state."""
-        crime_history = track_crime(self._history)
-        crime_rate = crime_history[-1] if crime_history else 0
+        crime_history = list(self._crime_history)
+        crime_rate = self.environment.crime_rate if crime_history else 0
         return {
             "step": step_number,
             "gini": self._gini(),
