@@ -1,6 +1,8 @@
 import { useState } from 'react';
 
-import { runExperiment } from './api';
+import { runExperiment, runSimulation } from './api';
+import GridCanvas from './components/GridCanvas';
+import InterventionTimeline from './components/InterventionTimeline';
 import MetricsChart from './components/MetricsChart';
 import './App.css';
 
@@ -8,9 +10,48 @@ const DEFAULT_FORM = {
   numAgents: 3,
   steps: 10,
   taxRate: 0.25,
+  giniThreshold: 0.4,
+  satisfactionThreshold: 40,
+  crimeThreshold: 50,
 };
 
 const SLIDER_FIELDS = [
+  {
+    field: 'taxRate',
+    id: 'taxRate',
+    label: 'Tax rate',
+    min: 0,
+    max: 1,
+    step: 0.01,
+    valueLabel: (value) => `${Math.round(value * 100)}%`,
+  },
+  {
+    field: 'giniThreshold',
+    id: 'giniThreshold',
+    label: 'Gini threshold',
+    min: 0,
+    max: 1,
+    step: 0.01,
+    valueLabel: (value) => value.toFixed(2),
+  },
+  {
+    field: 'satisfactionThreshold',
+    id: 'satisfactionThreshold',
+    label: 'Satisfaction threshold',
+    min: 0,
+    max: 100,
+    step: 1,
+    valueLabel: (value) => `${value}`,
+  },
+  {
+    field: 'crimeThreshold',
+    id: 'crimeThreshold',
+    label: 'Crime threshold',
+    min: 0,
+    max: 100,
+    step: 1,
+    valueLabel: (value) => `${value}`,
+  },
   {
     field: 'numAgents',
     id: 'numAgents',
@@ -65,6 +106,8 @@ function App() {
   const [result, setResult] = useState(null);
   const [status, setStatus] = useState('Ready');
   const [isRunning, setIsRunning] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [simulationResult, setSimulationResult] = useState(null);
 
   function updateField(field, value) {
     setForm((current) => ({
@@ -76,16 +119,20 @@ function App() {
   async function handleRunExperiment(event) {
     event.preventDefault();
     setIsRunning(true);
+    setProgress(10);
     setStatus(`Running experiment for ${form.numAgents} agents over ${form.steps} steps...`);
 
     try {
-      const nextResult = await runExperiment(form);
+      const [nextResult, nextSimulation] = await Promise.all([runExperiment(form), runSimulation(form)]);
       setResult(nextResult);
+      setSimulationResult(nextSimulation);
+      setProgress(100);
       setStatus(`Experiment complete for ${form.numAgents} agents over ${form.steps} steps`);
     } catch (error) {
       setStatus(`Experiment failed: ${error.message}`);
     } finally {
       setIsRunning(false);
+      setTimeout(() => setProgress(0), 800);
     }
   }
 
@@ -97,6 +144,29 @@ function App() {
       (experiment) => experiment.metrics_over_time?.length ?? 0,
     ),
   );
+  const interventionTimeline = (experiments.director_based?.metrics_over_time ?? []).flatMap((entry) =>
+    (entry.interventions ?? []).map((item) => ({ step: entry.step, ...item })),
+  );
+
+  async function copyJson() {
+    if (!result) return;
+    await navigator.clipboard.writeText(JSON.stringify(result, null, 2));
+    setStatus('Copied result JSON to clipboard');
+  }
+
+  function downloadCsv() {
+    if (!experiments.director_based?.metrics_over_time?.length) return;
+    const rows = experiments.director_based.metrics_over_time;
+    const header = ['step', 'gini', 'average_satisfaction', 'crime_rate', 'food_supply', 'price'];
+    const body = rows.map((row) => header.map((key) => row[key]).join(',')).join('\n');
+    const blob = new Blob([`${header.join(',')}\n${body}`], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'director_metrics.csv';
+    a.click();
+    URL.revokeObjectURL(url);
+  }
 
   return (
     <main className="min-h-screen bg-[radial-gradient(circle_at_top_left,_#1d4ed8,_transparent_34%),linear-gradient(135deg,_#020617,_#0f172a_45%,_#1e293b)] px-4 py-6 text-slate-900 sm:px-6 lg:px-8">
@@ -161,18 +231,6 @@ function App() {
                 </div>
               ))}
 
-              <label className="grid gap-2 text-sm font-bold text-slate-700">
-                Tax rate
-                <input
-                  className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-slate-900 shadow-sm outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
-                  max="1"
-                  min="0"
-                  step="0.01"
-                  type="number"
-                  value={form.taxRate}
-                  onChange={(event) => updateField('taxRate', event.target.value)}
-                />
-              </label>
             </div>
 
             <div className="rounded-2xl bg-slate-100 p-4">
@@ -186,6 +244,9 @@ function App() {
               >
                 {isRunning ? 'Running...' : 'Run Experiment'}
               </button>
+              <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-slate-200">
+                <div className="h-full bg-blue-500 transition-all" style={{ width: `${progress}%` }} />
+              </div>
             </div>
           </form>
 
@@ -226,16 +287,25 @@ function App() {
             <section className="grid gap-6 2xl:grid-cols-[1fr_420px]">
               <MetricsChart experiments={experiments} />
 
-              <article className="dashboard-card min-w-0">
+              <div className="grid gap-6">
+                <GridCanvas gridState={simulationResult?.grid_state} />
+                <InterventionTimeline timeline={interventionTimeline} />
+              </div>
+            </section>
+
+            <article className="dashboard-card min-w-0">
                 <div className="mb-4 flex items-center justify-between gap-4">
                   <h2 className="text-xl font-black text-slate-950">JSON result</h2>
-                  <span className="rounded-full bg-slate-100 px-3 py-1 text-sm font-black text-slate-500">{stepCount} steps</span>
+                  <div className="flex items-center gap-2">
+                    <button className="rounded-lg bg-slate-100 px-3 py-1 text-xs font-black text-slate-700" onClick={downloadCsv} type="button">Download CSV</button>
+                    <button className="rounded-lg bg-slate-100 px-3 py-1 text-xs font-black text-slate-700" onClick={copyJson} type="button">Copy JSON</button>
+                    <span className="rounded-full bg-slate-100 px-3 py-1 text-sm font-black text-slate-500">{stepCount} steps</span>
+                  </div>
                 </div>
                 <pre className="max-h-[720px] min-h-80 overflow-auto rounded-2xl bg-slate-950 p-4 text-sm leading-6 text-blue-100 shadow-inner">
                   {result ? JSON.stringify(result, null, 2) : 'No experiment result yet.'}
                 </pre>
               </article>
-            </section>
           </section>
         </section>
       </div>

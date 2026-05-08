@@ -9,11 +9,14 @@ const client = axios.create({
   },
 });
 
-function simulationPayload({ numAgents, steps, taxRate }) {
+function simulationPayload({ numAgents, steps, taxRate, giniThreshold, satisfactionThreshold, crimeThreshold }) {
   return {
     num_agents: numAgents,
     steps,
     tax_rate: taxRate,
+    gini_threshold: giniThreshold,
+    satisfaction_threshold: satisfactionThreshold,
+    crime_threshold: crimeThreshold,
   };
 }
 
